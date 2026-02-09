@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏛️ Alta Cúpula - Sistema de Gestão RJ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a0000 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .logo-rj {
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="55" font-size="50" fill="%238B0000" text-anchor="middle" font-weight="bold">RJ</text></svg>');
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+        .card {
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid rgba(139, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #8B0000 0%, #a00000 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(139, 0, 0, 0.4);
+        }
+        .stat-card {
+            background: linear-gradient(135deg, rgba(139, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
+            border-left: 4px solid #8B0000;
+        }
+        .menu-item.active {
+            background: linear-gradient(90deg, #8B0000 0%, transparent 100%);
+            border-left: 4px solid #D4AF37;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-red {
+            animation: pulse-red 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="text-gray-100">
+
+<div id="app"></div>
+
+<script>
+// ========================
+// BANCO DE DADOS LOCAL
+// ========================
+const DB = {
+    usuarios: JSON.parse(localStorage.getItem('ac_usuarios') || '[]'),
+    faccoes: JSON.parse(localStorage.getItem('ac_faccoes') || '[]'),
+    membros: JSON.parse(localStorage.getItem('ac_membros') || '[]'),
+    operacoes: JSON.parse(localStorage.getItem('ac_operacoes') || '[]'),
+    comunicados: JSON.parse(localStorage.getItem('ac_comunicados') || '[]'),
+    decisoes: JSON.parse(localStorage.getItem('ac_decisoes') || '[]'),
+    
+    save() {
+        localStorage.setItem('ac_usuarios', JSON.stringify(this.usuarios));
+        localStorage.setItem('ac_faccoes', JSON.stringify(this.faccoes));
+        localStorage.setItem('ac_membros', JSON.stringify(this.membros));
+        localStorage.setItem('ac_operacoes', JSON.stringify(this.operacoes));
+        localStorage.setItem('ac_comunicados', JSON.stringify(this.comunicados));
+        localStorage.setItem('ac_decisoes', JSON.stringify(this.decisoes));
+    },
+    
+    init() {
+        // Criar usuário admin padrão se não existir
+        if (this.usuarios.length === 0) {
+            this.usuarios.push({
+                id: 1,
+                nome: 'Comando Supremo',
+                apelido: 'Chefe',
+                senha: 'senha123',
+                cargo: 'Chefe',
+                nivel: 5,
+                status: 'Ativo'
+            });
+            this.save();
+        }
+    }
+};
+
+DB.init();
+
+// ========================
+// SISTEMA DE AUTENTICAÇÃO
+// ========================
+const Auth = {
+    usuario: JSON.parse(localStorage.getItem('ac_user_logado') || 'null'),
+    
+    login(apelido, senha) {
+        const user = DB.usuarios.find(u => u.apelido === apelido && u.senha === senha);
+        if (user) {
+            this.usuario = user;
+            localStorage.setItem('ac_user_logado', JSON.stringify(user));
+            return true;
+        }
+        return false;
+    },
+    
+    logout() {
+        this.usuario = null;
+        localStorage.removeItem('ac_user_logado');
+    },
+    
+    isLogado() {
+        return this.usuario !== null;
+    },
+    
+    isCupula() {
+        return this.usuario && this.usuario.nivel >= 5;
+    }
+};
+
+// ========================
+// APLICAÇÃO
+// ========================
+class App {
+    constructor() {
+        this.paginaAtual = Auth.isLogado() ? 'dashboard' : 'login';
+        this.render();
+    }
+    
+    mudarPagina(pagina) {
+        this.paginaAtual = pagina;
+        this.render();
+    }
+    
+    render() {
+        const app = document.getElementById('app');
+        
+        if (!Auth.isLogado()) {
+            app.innerHTML = this.renderLogin();
+            this.attachLoginHandlers();
+        } else {
+            app.innerHTML = this.renderLayout();
+            this.attachHandlers();
+        }
+    }
+    
+    renderLogin() {
+        return `
+            <div class="min-h-screen flex items-center justify-center p-4">
+                <div class="card rounded-2xl p-8 w-full max-w-md shadow-2xl">
+                    <div class="text-center mb-8">
+                        <div class="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-red-900 to-red-600 flex items-center justify-center shadow-lg">
+                            <span class="text-4xl">🏛️</span>
+                        </div>
+                        <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-yellow-500">
+                            Alta Cúpula
+                        </h1>
+                        <p class="text-gray-400 mt-2">Sistema de Gestão - Comando RJ</p>
+                    </div>
+                    
+                    <form id="loginForm" class="space-y-6">
+                        <div>
+                            <label class="block text-gray-300 text-sm font-semibold mb-2">Apelido</label>
+                            <input type="text" id="apelido" 
+                                class="w-full bg-black/50 border border-red-900/50 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20" 
+                                placeholder="Digite seu apelido" required>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-gray-300 text-sm font-semibold mb-2">Senha</label>
+                            <input type="password" id="senha" 
+                                class="w-full bg-black/50 border border-red-900/50 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20" 
+                                placeholder="Digite sua senha" required>
+                        </div>
+                        
+                        <div id="loginErro" class="hidden bg-red-900/30 border border-red-600 text-red-200 px-4 py-3 rounded-lg text-sm"></div>
+                        
+                        <button type="submit" class="btn-primary w-full text-white font-bold py-3 px-6 rounded-lg shadow-lg">
+                            🔓 Acessar Sistema
+                        </button>
+                    </form>
+                    
+                    <div class="mt-6 p-4 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
+                        <p class="text-yellow-200 text-xs text-center">
+                            <strong>Acesso padrão:</strong><br>
+                            Apelido: <code class="bg-black/30 px-2 py-1 rounded">Chefe</code> | 
+                            Senha: <code class="bg-black/30 px-2 py-1 rounded">senha123</code>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    renderLayout() {
+        return `
+            <div class="flex flex-col md:flex-row min-h-screen">
+                <!-- Sidebar -->
+                <div class="w-full md:w-64 bg-black/80 border-r border-red-900/30 md:min-h-screen">
+                    ${this.renderSidebar()}
+                </div>
+                
+                <!-- Conteúdo -->
+                <div class="flex-1 p-4 md:p-8">
+                    ${this.renderConteudo()}
+                </div>
+            </div>
+        `;
+    }
+    
+    renderSidebar() {
+        const menus = [
+            { id: 'dashboard', icon: '🏛️', label: 'Dashboard', nivel: 1 },
+            { id: 'faccoes', icon: '🏴', label: 'Facções', nivel: 1 },
+            { id: 'membros', icon: '👥', label: 'Membros', nivel: 3 },
+            { id: 'operacoes', icon: '💀', label: 'Operações', nivel: 3 },
+            { id: 'inteligencia', icon: '🕵️', label: 'Inteligência', nivel: 4 },
+            { id: 'comunicados', icon: '📢', label: 'Comunicados', nivel: 1 },
+            { id: 'cupula', icon: '👑', label: 'Alta Cúpula', nivel: 5 }
+        ];
+        
+        const menusFiltrados = menus.filter(m => Auth.usuario.nivel >= m.nivel);
+        
+        return `
+            <div class="p-6 border-b border-red-900/30">
+                <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-yellow-500">
+                    🏛️ Alta Cúpula
+                </h2>
+                <p class="text-xs text-gray-500 mt-1">Comando RJ</p>
+            </div>
+            
+            <div class="p-4 border-b border-red-900/30">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-red-600 to-red-800 rounded-full flex items-center justify-center font-bold shadow-lg">
+                        ${Auth.usuario.apelido[0].toUpperCase()}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold truncate">${Auth.usuario.apelido}</p>
+                        <p class="text-xs text-gray-400">${Auth.usuario.cargo}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <nav class="p-4 space-y-2">
+                ${menusFiltrados.map(m => `
+                    <button onclick="app.mudarPagina('${m.id}')" 
+                        class="menu-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${this.paginaAtual === m.id ? 'active' : 'hover:bg-red-900/20'}">
+                        <span class="text-xl">${m.icon}</span>
+                        <span class="font-medium">${m.label}</span>
+                    </button>
+                `).join('')}
+            </nav>
+            
+            <div class="absolute bottom-0 w-full md:w-64 p-4 border-t border-red-900/30">
+                <button onclick="app.sair()" class="w-full bg-red-900/30 hover:bg-red-900/50 text-red-200 font-semibold py-2 px-4 rounded-lg transition">
+                    🚪 Sair
+                </button>
+            </div>
+        `;
+    }
+    
+    renderConteudo() {
+        switch(this.paginaAtual) {
+            case 'dashboard': return this.renderDashboard();
+            case 'faccoes': return this.renderFaccoes();
+            case 'membros': return this.renderMembros();
+            case 'operacoes': return this.renderOperacoes();
+            case 'inteligencia': return this.renderInteligencia();
+            case 'comunicados': return this.renderComunicados();
+            case 'cupula': return this.renderCupula();
+            default: return this.renderDashboard();
+        }
+    }
+    
+    renderDashboard() {
+        const stats = {
+            faccoes: DB.faccoes.filter(f => f.status === 'Ativa').length,
+            membros: DB.membros.filter(m => m.status === 'Ativo').length,
+            operacoes: DB.operacoes.filter(o => o.status === 'Em Andamento').length,
+            comunicados: DB.comunicados.filter(c => c.prioridade === 'Urgente').length
+        };
+        
+        return `
+            <div class="mb-8">
+                <h1 class="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-yellow-500">
+                    Bem-vindo, ${Auth.usuario.apelido}
+                </h1>
+                <p class="text-gray-400 mt-2">${Auth.usuario.cargo} • ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                ${this.renderStatCard('🏴', 'Facções Ativas', stats.faccoes, 'from-yellow-600 to-yellow-800')}
+                ${this.renderStatCard('👥', 'Membros Ativos', stats.membros, 'from-green-600 to-green-800')}
+                ${this.renderStatCard('💀', 'Operações Ativas', stats.operacoes, 'from-red-600 to-red-800')}
+                ${this.renderStatCard('📢', 'Alertas Urgentes', stats.comunicados, 'from-orange-600 to-orange-800')}
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card rounded-xl p-6">
+                    <h2 class="text-xl font-bold text-red-500 mb-4">📊 Status do Sistema</h2>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center py-3 border-b border-gray-800">
+                            <span class="text-gray-400">Status Operacional</span>
+                            <span class="text-green-500 font-semibold flex items-center">
+                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2 pulse-red"></span>
+                                Online
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center py-3 border-b border-gray-800">
+                            <span class="text-gray-400">Seu Nível de Acesso</span>
+                            <span class="text-yellow-500 font-bold">${Auth.usuario.nivel}/5</span>
+                        </div>
+                        <div class="flex justify-between items-center py-3">
+                            <span class="text-gray-400">Total de Usuários</span>
+                            <span class="text-white font-semibold">${DB.usuarios.length}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card rounded-xl p-6">
+                    <h2 class="text-xl font-bold text-red-500 mb-4">⚡ Ações Rápidas</h2>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="app.mudarPagina('comunicados')" class="bg-gradient-to-br from-red-900/30 to-black/50 hover:from-red-800/40 hover:to-black/60 border border-red-800/30 p-4 rounded-lg transition text-left">
+                            <div class="text-2xl mb-2">📢</div>
+                            <div class="text-sm font-semibold">Ver Comunicados</div>
+                        </button>
+                        <button onclick="app.mudarPagina('faccoes')" class="bg-gradient-to-br from-red-900/30 to-black/50 hover:from-red-800/40 hover:to-black/60 border border-red-800/30 p-4 rounded-lg transition text-left">
+                            <div class="text-2xl mb-2">🏴</div>
+                            <div class="text-sm font-semibold">Ver Facções</div>
+                        </button>
+                        <button onclick="app.mudarPagina('operacoes')" class="bg-gradient-to-br from-red-900/30 to-black/50 hover:from-red-800/40 hover:to-black/60 border border-red-800/30 p-4 rounded-lg transition text-left">
+                            <div class="text-2xl mb-2">💀</div>
+                            <div class="text-sm font-semibold">Ver Operações</div>
+                        </button>
+                        <button onclick="app.mudarPagina('membros')" class="bg-gradient-to-br from-red-900/30 to-black/50 hover:from-red-800/40 hover:to-black/60 border border-red-800/30 p-4 rounded-lg transition text-left">
+                            <div class="text-2xl mb-2">👥</div>
+                            <div class="text-sm font-semibold">Ver Membros</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    renderStatCard(icon, titulo, valor, gradient) {
+        return `
+            <div class="stat-card card rounded-xl p-6 hover:scale-105 transition-transform cursor-pointer">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">${titulo}</p>
+                        <p class="text-3xl font-bold bg-gradient-to-r ${gradient} text-transparent bg-clip-text">${valor}</p>
+                    </div>
+                    <div class="text-5xl opacity-20">${icon}</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    renderFaccoes() {
+        return `
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-red-500 mb-2">🏴 Facções</h1>
+                <p class="text-gray-400">Gerenciamento de facções e territórios</p>
+            </div>
+            
+            ${Auth.usuario.nivel >= 4 ? `
+                <button onclick="app.modalNovaFaccao()" class="btn-primary mb-6 px-6 py-3 rounded-lg font-semibold shadow-lg">
+                    ➕ Nova Facção
+                </button>
+            ` : ''}
+            
+            ${DB.faccoes.length === 0 ? `
+                <div class="card rounded-xl p-8 text-center">
+                    <div class="text-6xl mb-4">🏴</div>
+                    <p class="text-gray-400">Nenhuma facção cadastrada ainda.</p>
+                </div>
+            ` : `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    ${DB.faccoes.map(f => `
+                        <div class="card rounded-xl p-6 hover:border-red-600 transition">
+                            <div class="flex items-start justify-between mb-4">
+                                <div>
+                                    <h3 class="text-xl font-bold text-white">${f.nome}</h3>
+                                    <p class="text-sm text-gray-400">${f.sigla}</p>
+                                </div>
+                                <span class="px-3 py-1 rounded-full text-xs font-semibold ${f.status === 'Ativa' ? 'bg-green-900/30 text-green-400' : 'bg-gray-700 text-gray-400'}">
+                                    ${f.status}
+                                </span>
+                            </div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Territórios:</span>
+                                    <span class="text-white font-semibold">${f.territorios || 0}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Membros:</span>
+                                    <span class="text-white font-semibold">${f.membros || 0}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Influência:</span>
+                                    <span class="text-yellow-500 font-semibold">${f.influencia || 0}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `}
+        `;
+    }
+    
+    renderMembros() {
+        return `
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-red-500 mb-2">👥 Membros</h1>
+                <p class="text-gray-400">Gestão de membros da organização</p>
+            </div>
+            
+            <button onclick="app.modalNovoMembro()" class="btn-primary mb-6 px-6 py-3 rounded-lg font-semibold shadow-lg">
+                ➕ Novo Membro
+            </button>
+            
+            ${DB.membros.length === 0 ? `
+                <div class="card rounded-xl p-8 text-center">
+                    <div class="text-6xl mb-4">👥</div>
+                    <p class="text-gray-400">
